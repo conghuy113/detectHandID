@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Recorder with Hand Overlay</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        #videoContainer { position: relative; width: 640px; height: 480px; margin: 0 auto; }
+        #videoElement { width: 100%; height: 100%; background-color: #666; }
+        #handImage {
+            position: absolute;
+            height: 100%;
+            width: 100%;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+        button { margin: 10px; padding: 10px 20px; font-size: 16px; }
+        #status { color: #666; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Video Recorder with Hand Overlay</h1>
+    <div id="videoContainer">
+        <video id="videoElement" autoplay></video>
+        <img id="handImage" src="{{ url_for('static', filename='ban-tay-chu-nhat9-Photoroom.png') }}" alt="Hand Overlay">
+    </div>
+    <br>
+    <button id="recordButton">Start Recording</button>
+    <div id="status"></div>
+
+    <script>
+        const videoElement = document.getElementById('videoElement');
+        const recordButton = document.getElementById('recordButton');
+        const statusElement = document.getElementById('status');
+
+        let mediaRecorder;
+        let recordedChunks = [];
+        let isRecording = false;
+
+        // Request access to the camera
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            .then(stream => {
+                videoElement.srcObject = stream;
+
+                // Set up the MediaRecorder with WebM container
+                const options = { mimeType: 'video/webm;codecs=vp9,opus' };
+                try {
+                    mediaRecorder = new MediaRecorder(stream, options);
+                } catch (e) {
+                    console.error('MediaRecorder is not supported:', e);
+                    statusElement.textContent = 'Recording not supported in this browser.';
+                    return;
+                }
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+                recordButton.onclick = startAutoRecording;
+            })
+            .catch(error => {
+                console.error('Error accessing the camera:', error);
+                statusElement.textContent = 'Error accessing the camera. Please ensure you have given permission.';
+            });
+
+        function startAutoRecording() {
+            if (!isRecording) {
+                startRecording();
+                // Automatically stop recording after 3 seconds (3000 ms)
+                setTimeout(stopRecording, 4000);
+            }
+        }
+
+        function startRecording() {
+            recordedChunks = [];
+            mediaRecorder.start(100); // Record in 100ms chunks
+            isRecording = true;
+            recordButton.textContent = 'Recording...';
+            statusElement.textContent = 'Recording...';
+        }
+
+        function stopRecording() {
+            if (isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+                recordButton.textContent = 'Start Recording';
+                statusElement.textContent = 'Recording stopped.';
+                saveVideo();
+            }
+        }
+
+        function saveVideo() {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+
+            // Create FormData to send the file
+            const formData = new FormData();
+            formData.append('video', blob, `recorded-video-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`);
+
+            // Send the video to the server via POST request
+            fetch('/save-video', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(data => {
+                statusElement.textContent = 'Video saved on server.';
+                console.log(data);
+            })
+            .catch(error => {
+                console.error('Error saving video:', error);
+                statusElement.textContent = 'Error saving video.';
+            });
+        }
+    </script>
+</body>
+</html>
